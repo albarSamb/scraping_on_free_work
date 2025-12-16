@@ -4,7 +4,7 @@ import pandas as pd
 import time
 import sys
 
-# Pour configurer lencodage UTF-8 pour windows
+# configurat° lencodage UTF-8 pour windows
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
 
@@ -14,7 +14,7 @@ headers = {
 }
 
 base_url = "https://www.free-work.com/fr/tech-it/jobs"
-DELAY = 3  # Pause ethique de 3 secondes entre chaque page
+DELAY = 3  # Pause ethique de 3s entre chaque page
 
 
 print("Testons la connexion au site free-work!!!")
@@ -29,7 +29,7 @@ else:
 
 # Etape 3 et 4 du tp: Gestion de la Pagination et des erreurs
 print("\n Extraction des offres avec pagination")
-nombre_pages = 1  # nbr de pages a scraper 
+nombre_pages = 2  # nbr de pages a scraper (mettre 2 pour 50-100 offres) 
 all_jobs = []  # liste pour stocker ttes les offres
 
 for page_number in range(1, nombre_pages + 1):
@@ -77,18 +77,34 @@ for page_number in range(1, nombre_pages + 1):
                 titre_element = soup_detail.find('h2', class_=lambda x: x and 'font-semibold' in x and 'text-xl' in x)
                 titre = titre_element.get_text(strip=True) if titre_element else "N/C"
 
+                # Filtrer les pages "Ce qu'il faut savoir sur..." (ce ne sont pas de vraies offres)
+                if "Ce qu" in titre and "il faut savoir sur" in titre:
+                    print(f" [IGNORE] {titre} (page d'info)")
+                    continue
+                if titre.startswith("DEVIENS") or titre.startswith("Déposez votre CV"):
+                    print(f" [IGNORE] {titre} (page générique)")
+                    continue
+
                 # extraire l'entreprise (div avec classe font-bold)
                 entreprise_element = soup_detail.find('div', class_='font-bold')
                 entreprise = entreprise_element.get_text(strip=True) if entreprise_element else "N/C"
 
-                # extraire le salaire
-                salaire = "N/C"
+                # extraire le salaire (TJM ou annuel)
+                tjm = "N/C"
+                salaire_annuel = "N/C"
                 spans = soup_detail.find_all('span', class_='text-sm truncate w-full')
                 for span in spans:
                     texte = span.get_text(strip=True)
-                    if 'EUR' in texte or 'k' in texte or chr(8364) in texte:
-                        salaire = texte
-                        break
+                    # Verifier que c'est bien un montant (contient € ou EUR)
+                    if '€' not in texte and 'EUR' not in texte:
+                        continue
+
+                    # Si c'est un TJM (contient /j) et pas encore trouve
+                    if ('/j' in texte or '€⁄j' in texte) and tjm == "N/C":
+                        tjm = texte
+                    # Si c'est un salaire annuel (contient /an ou k) et pas encore trouve
+                    elif (('/an' in texte or '€⁄an' in texte) or ('k' in texte and '€' in texte)) and salaire_annuel == "N/C":
+                        salaire_annuel = texte
 
                 # exraire la description (div avec classe fw-text-highlight line-clamp-4)
                 description_element = soup_detail.find('div', class_=lambda x: x and 'fw-text-highlight' in x and 'line-clamp-4' in x)
@@ -98,7 +114,8 @@ for page_number in range(1, nombre_pages + 1):
                 all_jobs.append({
                     'titre': titre,
                     'entreprise': entreprise,
-                    'salaire': salaire,
+                    'tjm': tjm,
+                    'salaire_annuel': salaire_annuel,
                     'description': description
                 })
 
@@ -137,7 +154,8 @@ if all_jobs:
     if len(df) > 0:
         print(f"  Titre: {df.iloc[0]['titre']}")
         print(f"  Entreprise: {df.iloc[0]['entreprise']}")
-        print(f"  Salaire: {df.iloc[0]['salaire']}")
+        print(f"  TJM: {df.iloc[0]['tjm']}")
+        print(f"  Salaire annuel: {df.iloc[0]['salaire_annuel']}")
         print(f"  Description: {df.iloc[0]['description'][:100]}...")
 else:
     print("\nAucune offre extraite. Pas de fichier CSV cree.")
